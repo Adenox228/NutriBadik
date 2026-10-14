@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "NutriBadik",
+    "slug": "nutribadik",
+    "owner": "whxnon",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "android": {
+      "package": "com.nutribadik.app",
+      "versionCode": 1
+    },
+    "extra": {
+      "eas": {
+        "projectId": "6cc615f2-e114-478b-9450-78b626a5faab"
+      }
+    }
+  }
+}
+
