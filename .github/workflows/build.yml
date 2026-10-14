@@ -1,41 +1,131 @@
-name: Build Android APK
+name: Build NutriBadik APK
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [ "main", "master" ]
+  workflow_dispatch:
 
 jobs:
-  android-apk:
+  build-android-apk:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
     steps:
-      - name: Checkout repository
+      - name: 1. Скачивание кода
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: 2. Установка Java 17
+        uses: actions/setup-java@v4
         with:
-          node-version: "20"
+          distribution: 'temurin'
+          java-version: '17'
 
-      - name: Install dependencies
-        run: npm install
+      - name: 3. Создание легкого Android WebView проекта
+        run: |
+          mkdir -p android-app/app/src/main/assets
+          mkdir -p android-app/app/src/main/java/com/scimacro/nutribadik
+          mkdir -p android-app/app/src/main/res/values
+          mkdir -p android-app/app/src/main/res/mipmap-hdpi
 
-      - name: Generate Android native project
-        run: npx expo prebuild --platform android --clean
+          # Копируем наш index.html в ресурсы приложения
+          cp index.html android-app/app/src/main/assets/index.html
 
-      - name: Grant execute permission to Gradlew
-        run: chmod +x android/gradlew
+          # Генерируем минимальный AndroidManifest.xml с разрешениями камеры и интернета
+          cat << 'EOF' > android-app/app/src/main/AndroidManifest.xml
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="com.scimacro.nutribadik">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.CAMERA" />
+              <application
+                  android:allowBackup="true"
+                  android:icon="@mipmap/ic_launcher"
+                  android:label="NutriBadik"
+                  android:roundIcon="@mipmap/ic_launcher_round"
+                  android:usesCleartextTraffic="true">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
 
-      - name: Build debug APK
-        run: cd android && ./gradlew assembleDebug
+          # Генерируем Java-класс для открытия index.html через WebView
+          cat << 'EOF' > android-app/app/src/main/java/com/scimacro/nutribadik/MainActivity.kt
+          package com.scimacro.nutribadik
+          import android.annotation.SuppressLint
+          import android.app.Activity
+          import android.os.Bundle
+          import android.webkit.WebView
+          import android.webkit.WebViewClient
+          import android.webkit.WebSettings
+          import android.Manifest
+          import android.content.pm.PackageManager
+          import androidx.core.app.ActivityCompat
+          import androidx.core.content.ContextCompat
 
-      - name: Upload APK artifact
+          class MainActivity : Activity() {
+              @SuppressLint("SetJavaScriptEnabled")
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                      ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 100)
+                  }
+                  val webView = WebView(this)
+                  webView.settings.javaScriptEnabled = true
+                  webView.settings.domStorageEnabled = true
+                  webView.settings.databaseEnabled = true
+                  webView.settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                  webView.webViewClient = WebViewClient()
+                  webView.loadUrl("file:///android_asset/index.html")
+                  setContentView(webView)
+              }
+          }
+          EOF
+
+          # Создаем базовый build.gradle
+          cat << 'EOF' > android-app/build.gradle
+          buildscript {
+              repositories { google(); mavenCentral() }
+              dependencies { classpath 'com.android.tools.build:gradle:8.1.0' }
+          }
+          allprojects { repositories { google(); mavenCentral() } }
+          EOF
+
+          cat << 'EOF' > android-app/settings.gradle
+          rootProject.name = "NutriBadik"
+          include ':app'
+          EOF
+
+          cat << 'EOF' > android-app/app/build.gradle
+          plugins { id 'com.android.application' }
+          android {
+              namespace 'com.scimacro.nutribadik'
+              compileSdk 33
+              defaultConfig {
+                  applicationId 'com.scimacro.nutribadik'
+                  minSdk 24
+                  targetSdk 33
+                  versionCode 1
+                  versionName '3.1'
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+          dependencies { implementation 'androidx.core:core-ktx:1.9.0' }
+          EOF
+
+          cd android-app
+          chmod +x gradlew || true
+          gradle wrapper
+          ./gradlew assembleDebug
+
+      - name: 4. Выгрузка готового APK
         uses: actions/upload-artifact@v4
         with:
-          name: nutribadik-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          name: NutriBadik-APK
+          path: android-app/app/build/outputs/apk/debug/app-debug.apk
