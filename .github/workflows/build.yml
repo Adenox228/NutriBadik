@@ -1,11 +1,17 @@
-name: Build Native APK
+name: Build Android APK
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
-  build-android:
+  android-apk:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -13,16 +19,23 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
-
-      - name: Install EAS CLI
-        run: npm install -g eas-cli
+          node-version: "20"
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm install
 
-      - name: Trigger APK Build on EAS
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: eas build --platform android --profile preview --non-interactive --no-wait
+      - name: Generate Android native project
+        run: npx expo prebuild --platform android --clean
 
+      - name: Grant execute permission to Gradlew
+        run: chmod +x android/gradlew
+
+      - name: Build debug APK
+        run: cd android && ./gradlew assembleDebug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nutribadik-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
