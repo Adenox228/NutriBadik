@@ -18,17 +18,23 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 3. Создание легкого Android WebView проекта
+      - name: 3. Создание проекта и поиск index.html
         run: |
           mkdir -p android-app/app/src/main/assets
           mkdir -p android-app/app/src/main/java/com/scimacro/nutribadik
           mkdir -p android-app/app/src/main/res/values
           mkdir -p android-app/app/src/main/res/mipmap-hdpi
 
-          # Копируем наш index.html в ресурсы приложения
-          cp index.html android-app/app/src/main/assets/index.html
+          # Автоматический поиск файла index.html в репозитории
+          FOUND_HTML=$(find . -maxdepth 2 -iname "index.html" | head -n 1)
+          if [ -z "$FOUND_HTML" ]; then
+            echo "Ошибка: файл index.html не найден в репозитории!"
+            exit 1
+          fi
+          echo "Найден файл: $FOUND_HTML"
+          cp "$FOUND_HTML" android-app/app/src/main/assets/index.html
 
-          # Генерируем минимальный AndroidManifest.xml с разрешениями камеры и интернета
+          # Генерируем минимальный AndroidManifest.xml
           cat << 'EOF' > android-app/app/src/main/AndroidManifest.xml
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
               package="com.scimacro.nutribadik">
@@ -52,7 +58,7 @@ jobs:
           </manifest>
           EOF
 
-          # Генерируем Java-класс для открытия index.html через WebView
+          # Генерируем MainActivity.kt для WebView
           cat << 'EOF' > android-app/app/src/main/java/com/scimacro/nutribadik/MainActivity.kt
           package com.scimacro.nutribadik
           import android.annotation.SuppressLint
@@ -85,7 +91,6 @@ jobs:
           }
           EOF
 
-          # Создаем базовый build.gradle
           cat << 'EOF' > android-app/build.gradle
           buildscript {
               repositories { google(); mavenCentral() }
